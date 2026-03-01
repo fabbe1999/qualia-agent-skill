@@ -1,6 +1,6 @@
 ---
 name: qualia
-description: Fine-tune robotic foundation models on Qualia. Use when asked to train a robot model, check training status, manage Qualia projects, browse available model types, or inspect datasets.
+description: Train Robotic AI Models using Qualia. Use when asked to train a robot model, check training status, manage Qualia projects, browse available model types, or inspect datasets.
 metadata: {"clawdis":{"emoji":"🤖","requires":{"env":["QUALIA_API_KEY"]}}}
 ---
 
