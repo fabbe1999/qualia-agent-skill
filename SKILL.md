@@ -1,6 +1,6 @@
 ---
 name: qualia
-description: Launch and monitor VLA fine-tuning jobs on Qualia — the platform for robotic foundation models. Use when asked to train a robot model, check training status, manage Qualia projects, browse available VLA types, or inspect datasets.
+description: Fine-tune robotic foundation models on Qualia. Use when asked to train a robot model, check training status, manage Qualia projects, browse available model types, or inspect datasets.
 metadata: {"clawdis":{"emoji":"🤖","requires":{"env":["QUALIA_API_KEY"]}}}
 ---
 
