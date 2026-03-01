@@ -1,10 +1,10 @@
 # Qualia Agent Skill 🤖🦾
 
-Make **robotics training** a skill for your AI agent. This skill lets any agent launch, monitor, and iterate on VLA (Vision-Language-Action) fine-tuning jobs on [Qualia](https://qualiastudios.dev) — the platform for robotic foundation models.
+Make **robotics training** a skill for your AI agent. This skill lets any agent fine-tune robotic foundation models on [Qualia](https://qualiastudios.dev) — launch training jobs, monitor progress, iterate on parameters, and build full pipelines from conversation.
 
 ## What can your agent do with this?
 
-- Launch fine-tuning jobs for VLA models (ACT, SmolVLA, π0, π0.5, GR00T N1.5)
+- Fine-tune robotic foundation models (ACT, SmolVLA, π0, π0.5, GR00T N1.5, and more)
 - Monitor training progress in real-time
 - Iterate on hyperparameters and reward functions
 - Build full training pipelines from conversation
@@ -15,11 +15,13 @@ Make **robotics training** a skill for your AI agent. This skill lets any agent 
 | Type | Description |
 |------|-------------|
 | `act` | Action Chunking Transformer — fast, lightweight |
-| `smolvla` | SmolVLA — efficient open-source VLA |
+| `smolvla` | SmolVLA — efficient open-source model |
 | `pi0` | π0 — Physical Intelligence foundation model |
 | `pi05` | π0.5 — dexterous manipulation variant |
 | `gr00t_n1_5` | GR00T N1.5 — NVIDIA humanoid foundation model |
 | `sarm` | SARM — reward model for RA-BC |
+
+More models coming soon.
 
 ## Setup
 
