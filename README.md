@@ -25,7 +25,7 @@ More models coming soon.
 
 ## Setup
 
-1. Get a Qualia API key (DM [@faaborgs](https://x.com/faaborgs) or email hello@qualiastudios.dev)
+1. Get a Qualia API key from the [Qualia app](https://app.qualiastudios.dev/)
 2. Set the environment variable:
    ```bash
    export QUALIA_API_KEY="your-api-key"
