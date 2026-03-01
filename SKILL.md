@@ -6,7 +6,7 @@ metadata: {"clawdis":{"emoji":"🤖","requires":{"env":["QUALIA_API_KEY"]}}}
 
 # Qualia
 
-Fine-tune vision-language-action (VLA) models for robotics on Qualia's GPU infrastructure.
+Fine-tune and iterate on robotic foundation models — VLAs, reward models, and more — on cloud GPUs.
 
 ## Setup
 
