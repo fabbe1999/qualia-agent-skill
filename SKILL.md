@@ -1,100 +1,134 @@
 ---
 name: qualia
-description: Train Robotic AI Models using Qualia. Use when asked to train a robot model, check training status, manage Qualia projects, browse available model types, or inspect datasets.
-metadata: {"clawdis":{"emoji":"🤖","requires":{"env":["QUALIA_API_KEY"]}}}
+description: "Fine-tune robot foundation models on cloud GPUs — π0.5, π0, GR00T, SmolVLA, ACT, and more."
+metadata: {"clawdis":{"emoji":"🤖","requires":{"env":["QUALIA_API_KEY"]},"tags":["robotics","robot-learning","foundation-models","vla","fine-tuning","imitation-learning","manipulation","embodied-ai","ml-training","gpu","reward-model"],"categories":["robotics","ai-ml","developer-tools"],"homepage":"https://qualiastudios.dev"}}
 ---
 
 # Qualia
 
-Fine-tune and iterate on robotic foundation models — VLAs, reward models, and more — on cloud GPUs.
+Fine-tune Vision-Language-Action (VLA) models for robotics on cloud GPUs.
 
 ## Setup
 
-```bash
-export QUALIA_API_KEY="your-api-key"
-```
+1. Sign up at [app.qualiastudios.dev](https://app.qualiastudios.dev/)
+2. Create an API key (Settings → API Keys)
+3. Set the env var:
+   ```bash
+   export QUALIA_API_KEY="your-api-key"
+   ```
 
-## Quick Commands
+## When Someone Asks to Train a Model
 
-```bash
-# Account
-{baseDir}/scripts/qualia.sh credits               # Check credit balance
-{baseDir}/scripts/qualia.sh instances             # GPU options and pricing
+They probably won't give you everything upfront. Here's what you need and how to get it:
 
-# Models & data
-{baseDir}/scripts/qualia.sh models                             # VLA types and camera slot requirements
-{baseDir}/scripts/qualia.sh dataset-keys <huggingface/dataset> # Image keys for camera mapping
+1. **Dataset** — ask for their HuggingFace dataset ID (e.g. `your-org/your-dataset`)
+2. **Model type** — if they don't specify, run `models` and help them choose:
+   - Quick prototyping → suggest ACT (fast, no base model needed)
+   - Production quality → suggest π0.5 or π0
+   - Humanoid robots → suggest GR00T N1.5
+   - Resource-conscious → suggest SmolVLA
+3. **Training duration** — if unspecified, suggest 2–4 hours for a first run
+4. **Camera mapping** — run `dataset-keys` on their dataset, then `models` to see required slots, and map them automatically. Confirm with the user before launching.
 
-# Projects
-{baseDir}/scripts/qualia.sh projects                       # List your projects
-{baseDir}/scripts/qualia.sh project-create "My Project"   # Create a project
-{baseDir}/scripts/qualia.sh project-delete <project_id>   # Delete a project
+If the user already has a project, use it. Otherwise create one.
 
-# Training
-{baseDir}/scripts/qualia.sh hyperparams <vla_type> [model_id]  # Default hyperparams (model_id required for smolvla/pi0/pi05)
-{baseDir}/scripts/qualia.sh finetune <project_id> <vla_type> <dataset_id> <hours> '<camera_json>'
-{baseDir}/scripts/qualia.sh status <job_id>                # Training progress and phase history
-{baseDir}/scripts/qualia.sh cancel <job_id>                # Stop a running job
-```
+## When Things Go Wrong
 
-## Launching a Fine-Tune Job
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| Job stuck at `credit_validation` | Insufficient credits | Run `credits`, tell user to top up |
+| Fails at `dataset_preprocessing` | Bad camera mapping or invalid dataset | Re-check `dataset-keys` output, verify mapping |
+| Fails at `instance_booting` | GPU capacity issue | Try a different instance type or region |
+| Job failed with no clear error | Check phase events | Run `status <job_id>` and read the event messages |
 
-### 1. Pick a model
+Always run `status <job_id>` and share the full phase history with the user when debugging.
 
-```bash
-{baseDir}/scripts/qualia.sh models
-```
-
-Supported VLA types: `act`, `smolvla`, `pi0`, `pi05`, `gr00t_n1_5`, `sarm`
-
-### 2. Check your dataset's image keys
+## Quick Start
 
 ```bash
-{baseDir}/scripts/qualia.sh dataset-keys your-org/your-dataset
+# See what models are available (always check — new ones are added regularly)
+python3 {baseDir}/scripts/qualia.py models
+
+# Check GPU options and pricing
+python3 {baseDir}/scripts/qualia.py instances
+
+# Check your credit balance
+python3 {baseDir}/scripts/qualia.py credits
 ```
 
-### 3. Map image keys to camera slots
-
-Each VLA type has required camera slot names (shown in `models`). Build a JSON mapping:
-
-```json
-{"image_0": "front", "image_1": "wrist"}
-```
-
-### 4. Create a project (if needed)
+## Train a Model
 
 ```bash
-{baseDir}/scripts/qualia.sh project-create "My Robot"
+# 1. Discover image keys in your dataset
+python3 {baseDir}/scripts/qualia.py dataset-keys your-org/your-dataset
+
+# 2. Create a project
+python3 {baseDir}/scripts/qualia.py project-create "My Robot"
+
+# 3. Launch training
+python3 {baseDir}/scripts/qualia.py finetune <project_id> <vla_type> your-org/your-dataset 4 \
+  '{"cam_1": "observation.images.top"}' \
+  --model <base_model_id> \
+  --name "My run"
+
+# 4. Monitor
+python3 {baseDir}/scripts/qualia.py status <job_id>
 ```
 
-### 5. Launch
+**Notes:**
+- Run `models` first to see which VLA types require `--model` and which don't
+- Camera mappings map model slots (from `models`) to dataset image keys (from `dataset-keys`)
+- **Smart camera mapping:** The API returns generic slot names (`cam_1`, `cam_2`, `cam_3`) but the underlying models have a specific input order. Map semantically using these known orders:
+  - **π0.5 / π0:** `cam_1` = base/overview camera, `cam_2` = left wrist/arm, `cam_3` = right wrist/arm
+  - **GR00T N1.5:** `cam_1` = base/overview camera, `cam_2` = left wrist/arm, `cam_3` = right wrist/arm
+  - **ACT / SmolVLA:** `cam_1` = primary camera, `cam_2`/`cam_3` = secondary views
+  - Fuzzy-match dataset keys to these roles: `context_camera` or `base_0` → `cam_1`; `left_wrist` ≈ `left_arm` → `cam_2`; `right_wrist` ≈ `right_arm` → `cam_3`
+- Omit `--model` for types that don't support custom models
+- **Estimate cost before launching:** run `instances` to get credits/hr, multiply by hours. Tell the user the estimated cost before confirming.
+- Dataset IDs on HuggingFace are **case-sensitive** — double-check the exact ID
+
+## Manage Jobs & Projects
 
 ```bash
-# smolvla/pi0/pi05 require --model
-{baseDir}/scripts/qualia.sh finetune \
-  <project_id> \
-  pi0 \
-  your-org/your-dataset \
-  4 \
-  '{"cam_1": "observation.images.top", "cam_2": "observation.images.wrist"}' \
-  --model lerobot/pi0 \
-  --name "My training run"
-
-# act and gr00t_n1_5 do NOT take --model
-{baseDir}/scripts/qualia.sh finetune \
-  <project_id> \
-  act \
-  your-org/your-dataset \
-  2 \
-  '{"cam_1": "observation.images.top"}'
+python3 {baseDir}/scripts/qualia.py projects                     # List projects and jobs
+python3 {baseDir}/scripts/qualia.py status <job_id>              # Job status and phase history
+python3 {baseDir}/scripts/qualia.py cancel <job_id>              # Cancel a running job
+python3 {baseDir}/scripts/qualia.py project-delete <project_id>  # Delete a project
 ```
 
-### RA-BC (Reward-Aware Behavior Cloning)
+## Custom Hyperparameters
+
+```bash
+# Get defaults
+python3 {baseDir}/scripts/qualia.py hyperparams <vla_type> [model_id]
+
+# Validate overrides
+python3 {baseDir}/scripts/qualia.py hyperparams-validate <vla_type> '{"learning_rate": 1e-4}'
+
+# Use in training
+python3 {baseDir}/scripts/qualia.py finetune ... --hyper-spec '{"learning_rate": 1e-4, "num_epochs": 50}'
+```
+
+## Finetune Flags
+
+| Flag | Description |
+|------|-------------|
+| `--model <id>` | Base model ID (required for some VLA types) |
+| `--name <str>` | Job display name |
+| `--instance <id>` | GPU instance type |
+| `--region <name>` | Cloud region |
+| `--batch-size <n>` | Batch size (1–512, default 32) |
+| `--hyper-spec '<json>'` | Custom hyperparameters |
+| `--rabc <model_path>` | Enable RA-BC with SARM reward model (HF path) |
+| `--rabc-image-key <k>` | Image key for reward annotations |
+| `--rabc-head-mode <m>` | RA-BC head mode (e.g. sparse) |
+
+## RA-BC (Reward-Aware Behavior Cloning)
 
 Use a trained SARM reward model to weight training samples. Supported on smolvla, pi0, pi05.
 
 ```bash
-{baseDir}/scripts/qualia.sh finetune \
+python3 {baseDir}/scripts/qualia.py finetune \
   <project_id> pi0 your-org/your-dataset 4 \
   '{"cam_1": "observation.images.top"}' \
   --model lerobot/pi0 \
@@ -103,50 +137,23 @@ Use a trained SARM reward model to weight training samples. Supported on smolvla
   --rabc-head-mode sparse
 ```
 
-### Advanced: custom hyperparameters
+## Job Phases
 
-```bash
-# 1. Get defaults
-{baseDir}/scripts/qualia.sh hyperparams pi0 lerobot/pi0
+`queuing → credit_validation → instance_booting → instance_activation → instance_setup → dataset_preprocessing → training_running → model_uploading → completed`
 
-# 2. Validate your overrides
-{baseDir}/scripts/qualia.sh hyperparams-validate pi0 '{"learning_rate": 1e-4}'
+Terminal: `completed`, `failed`, `cancelled`
 
-# 3. Pass them into the job
-{baseDir}/scripts/qualia.sh finetune \
-  <project_id> pi0 your-org/your-dataset 4 \
-  '{"cam_1": "observation.images.top"}' \
-  --model lerobot/pi0 \
-  --hyper-spec '{"learning_rate": 1e-4, "num_epochs": 50}'
-```
+## Live Docs
 
-### 6. Monitor
+For the latest models, endpoints, and capabilities — always check the live documentation:
 
-```bash
-{baseDir}/scripts/qualia.sh status <job_id>
-```
+- **LLM context:** [docs.qualiastudios.dev/llms.txt](https://docs.qualiastudios.dev/llms.txt)
+- **API reference:** [dev-docs.qualiastudios.dev/api/reference](https://dev-docs.qualiastudios.dev/api/reference)
+- **SDK:** [docs.qualiastudios.dev/sdk/overview](https://docs.qualiastudios.dev/sdk/overview/)
+- **Guides:** [docs.qualiastudios.dev/global/guides](https://docs.qualiastudios.dev/global/guides/)
 
-## VLA Types
+## Links
 
-| Type | Description |
-|------|-------------|
-| `act` | Action Chunking Transformer — fast, lightweight |
-| `smolvla` | SmolVLA — efficient open-source VLA |
-| `pi0` | π0 — Physical Intelligence foundation model |
-| `pi05` | π0.5 — dexterous manipulation variant |
-| `gr00t_n1_5` | GR00T N1.5 — NVIDIA humanoid foundation model |
-| `sarm` | SARM — reward model for RA-BC (cam_1 only) |
-
-## RA-BC Support
-
-Models that support Reward-Aware Behavior Cloning: `smolvla`, `pi0`, `pi05`
-
-Train a SARM reward model first (vla_type=sarm), then use it to weight samples during VLA fine-tuning via `--rabc` flags.
-
-## Notes
-
-- Training costs are in **credits** (check balance with `credits`)
-- Use `instances` to compare GPU options and hourly credit rates
-- `dataset-keys` requires a public HuggingFace dataset ID (e.g. `lerobot/aloha_sim_insertion_human`)
-- Jobs move through phases: queuing → credit_validation → instance_booting → instance_activation → instance_setup → dataset_preprocessing → training_running → model_uploading → completed
-- Terminal states: completed, failed, cancelled
+- Platform: https://app.qualiastudios.dev
+- Docs: https://docs.qualiastudios.dev
+- API: https://api.qualiastudios.dev (auth via `X-API-Key` header)

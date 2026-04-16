@@ -51,19 +51,19 @@ The `SKILL.md` file is a self-contained instruction set. Drop it into any agent'
 
 ## How it works
 
-The skill provides a bash script (`scripts/qualia.sh`) that wraps the Qualia API. Your agent reads `SKILL.md` to understand the available commands and uses them to manage training jobs.
+The skill provides a Python script (`scripts/qualia.py`) that wraps the Qualia API. Your agent reads `SKILL.md` to understand the available commands and uses them to manage training jobs.
 
 Example flow:
-1. Agent checks available models → `qualia.sh models`
-2. Inspects dataset image keys → `qualia.sh dataset-keys org/dataset`
-3. Creates a project → `qualia.sh project-create "My Robot"`
-4. Launches training → `qualia.sh finetune ...`
-5. Monitors progress → `qualia.sh status <job_id>`
+1. Agent checks available models → `python3 qualia.py models`
+2. Inspects dataset image keys → `python3 qualia.py dataset-keys org/dataset`
+3. Creates a project → `python3 qualia.py project-create "My Robot"`
+4. Launches training → `python3 qualia.py finetune ...`
+5. Monitors progress → `python3 qualia.py status <job_id>`
 6. Adjusts and retrains as needed
 
 ## Requirements
 
-- `curl` and `jq` (standard on most systems)
+- Python 3.6+ (uses only standard library — no external dependencies)
 - A Qualia API key with credits
 
 ## Links
