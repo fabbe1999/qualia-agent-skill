@@ -19,6 +19,29 @@ API_BASE = "https://api.qualiastudios.dev"
 
 JSON_MODE = False
 
+# Exit code contract (stable, documented in SKILL.md):
+EXIT_OK = 0
+EXIT_GENERIC = 1        # unknown/unclassified failure
+EXIT_USAGE = 2          # bad arguments / unknown command
+EXIT_AUTH = 3           # missing key, HTTP 401/403
+EXIT_CREDITS = 4        # insufficient credits (HTTP 402)
+EXIT_VALIDATION = 5     # HTTP 400/422 (bad camera mapping, hyperparams, dataset)
+EXIT_NOT_FOUND = 6      # HTTP 404
+EXIT_CONNECTION = 7     # network/connection failure
+
+
+def http_status_to_exit_code(status):
+    """Map an HTTP status code to the CLI exit code contract."""
+    if status in (401, 403):
+        return EXIT_AUTH
+    if status == 402:
+        return EXIT_CREDITS
+    if status in (400, 422):
+        return EXIT_VALIDATION
+    if status == 404:
+        return EXIT_NOT_FOUND
+    return EXIT_GENERIC
+
 
 class CliError(Exception):
     """Carries an exit code, a message, and optional structured details."""
@@ -51,13 +74,13 @@ def fail(err):
 
 
 def usage_error(text):
-    raise CliError(1, text)
+    raise CliError(EXIT_USAGE, text)
 
 
 def get_api_key():
     key = os.environ.get("QUALIA_API_KEY", "")
     if not key:
-        raise CliError(1, "QUALIA_API_KEY not set")
+        raise CliError(EXIT_AUTH, "QUALIA_API_KEY not set")
     return key
 
 
@@ -84,9 +107,10 @@ def api_request(method, path, body=None):
             details = json.loads(e.read().decode("utf-8"))
         except Exception:
             details = {"reason": str(e.reason)}
-        raise CliError(1, f"API error ({e.code})", details)
+        raise CliError(http_status_to_exit_code(e.code),
+                       f"API error ({e.code})", details)
     except urllib.error.URLError as e:
-        raise CliError(1, f"Connection error: {e.reason}")
+        raise CliError(EXIT_CONNECTION, f"Connection error: {e.reason}")
 
 
 # -- Commands ----------------------------------------------------------
@@ -420,7 +444,11 @@ Commands:
 VLA types: act, smolvla, pi0, pi05, gr00t_n1_5, sarm
   model_id REQUIRED for: smolvla, pi0, pi05
   model_id NOT supported for: act, gr00t_n1_5, sarm
-  RA-BC supported for: smolvla, pi0, pi05"""
+  RA-BC supported for: smolvla, pi0, pi05
+
+Exit codes:
+  0 ok | 1 generic | 2 usage | 3 auth | 4 insufficient credits
+  5 validation | 6 not found | 7 connection"""
 
 
 def cmd_help(_args):
@@ -461,7 +489,7 @@ def main():
 
     handler = COMMANDS.get(cmd)
     if handler is None:
-        fail(CliError(1, f"Unknown command: {cmd}",
+        fail(CliError(EXIT_USAGE, f"Unknown command: {cmd}",
                       {"hint": "Run 'qualia.py help' for available commands."}))
 
     try:
