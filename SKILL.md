@@ -1,7 +1,7 @@
 ---
 name: qualia
-description: "Fine-tune robot foundation models on cloud GPUs — π0.5, π0, GR00T, SmolVLA, ACT, and more."
-metadata: {"clawdis":{"emoji":"🤖","requires":{"env":["QUALIA_API_KEY"]},"tags":["robotics","robot-learning","foundation-models","vla","fine-tuning","imitation-learning","manipulation","embodied-ai","ml-training","gpu","reward-model"],"categories":["robotics","ai-ml","developer-tools"],"homepage":"https://qualiastudios.dev"}}
+description: "Fine-tune robot foundation models (VLA, vision-language-action) on cloud GPUs: pi0, pi0.5 (π0.5), GR00T N1.5, ACT, SmolVLA, SARM reward models. Robotics and robot training with LeRobot-format HuggingFace datasets. Launch, monitor, and cancel fine-tune jobs from the CLI. Agent-native: --json output and stable exit codes."
+metadata: {"version":"2.0.0","clawdis":{"emoji":"🤖","requires":{"env":["QUALIA_API_KEY"]},"tags":["robotics","robot-learning","foundation-models","vla","fine-tuning","imitation-learning","manipulation","embodied-ai","ml-training","gpu","reward-model"],"categories":["robotics","ai-ml","developer-tools"],"homepage":"https://qualiastudios.dev"}}
 ---
 
 # Qualia
@@ -17,18 +17,52 @@ Fine-tune Vision-Language-Action (VLA) models for robotics on cloud GPUs.
    export QUALIA_API_KEY="your-api-key"
    ```
 
+## Verify your install
+
+First thing after setup, run the self-test:
+
+```bash
+python3 {baseDir}/scripts/qualia.py doctor
+```
+
+It checks the API key, auth/connectivity (`/v1/credits`), and the models endpoint. Exit 0 means everything works. Add `--json` for machine-readable results.
+
+## Machine-readable output
+
+Every command accepts a global `--json` flag. In JSON mode, stdout carries exactly one JSON object or array and nothing else. Errors are emitted on stdout as `{"error": {"code": <int>, "message": "...", "details": ...}}` with the matching exit code.
+
+```bash
+python3 {baseDir}/scripts/qualia.py --json credits
+# {"balance": 90784}
+```
+
+Prefer `--json` when driving the CLI programmatically; parse stdout, branch on exit code.
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Generic/unknown failure |
+| 2 | Usage error (bad arguments, unknown command) |
+| 3 | Auth error (HTTP 401/403 or missing `QUALIA_API_KEY`) |
+| 4 | Insufficient credits (HTTP 402) |
+| 5 | Validation error (bad camera mapping, hyperparams, or dataset; HTTP 400/422) |
+| 6 | Not found (HTTP 404) |
+| 7 | Connection/network error |
+
 ## When Someone Asks to Train a Model
 
 They probably won't give you everything upfront. Here's what you need and how to get it:
 
-1. **Dataset** — ask for their HuggingFace dataset ID (e.g. `your-org/your-dataset`)
-2. **Model type** — if they don't specify, run `models` and help them choose:
+1. **Dataset**: ask for their HuggingFace dataset ID (e.g. `your-org/your-dataset`)
+2. **Model type**: if they don't specify, run `models` and help them choose:
    - Quick prototyping → suggest ACT (fast, no base model needed)
    - Production quality → suggest π0.5 or π0
    - Humanoid robots → suggest GR00T N1.5
    - Resource-conscious → suggest SmolVLA
-3. **Training duration** — if unspecified, suggest 2–4 hours for a first run
-4. **Camera mapping** — run `dataset-keys` on their dataset, then `models` to see required slots, and map them automatically. Confirm with the user before launching.
+3. **Training duration**: if unspecified, suggest 2 to 4 hours for a first run
+4. **Camera mapping**: run `dataset-keys` on their dataset, then `models` to see required slots, and map them automatically. Confirm with the user before launching.
 
 If the user already has a project, use it. Otherwise create one.
 
@@ -46,7 +80,7 @@ Always run `status <job_id>` and share the full phase history with the user when
 ## Quick Start
 
 ```bash
-# See what models are available (always check — new ones are added regularly)
+# See what models are available (always check, new ones are added regularly)
 python3 {baseDir}/scripts/qualia.py models
 
 # Check GPU options and pricing
@@ -85,7 +119,7 @@ python3 {baseDir}/scripts/qualia.py status <job_id>
   - Fuzzy-match dataset keys to these roles: `context_camera` or `base_0` → `cam_1`; `left_wrist` ≈ `left_arm` → `cam_2`; `right_wrist` ≈ `right_arm` → `cam_3`
 - Omit `--model` for types that don't support custom models
 - **Estimate cost before launching:** run `instances` to get credits/hr, multiply by hours. Tell the user the estimated cost before confirming.
-- Dataset IDs on HuggingFace are **case-sensitive** — double-check the exact ID
+- Dataset IDs on HuggingFace are **case-sensitive**, double-check the exact ID
 
 ## Manage Jobs & Projects
 
@@ -117,7 +151,7 @@ python3 {baseDir}/scripts/qualia.py finetune ... --hyper-spec '{"learning_rate":
 | `--name <str>` | Job display name |
 | `--instance <id>` | GPU instance type |
 | `--region <name>` | Cloud region |
-| `--batch-size <n>` | Batch size (1–512, default 32) |
+| `--batch-size <n>` | Batch size (1-512, default 32) |
 | `--hyper-spec '<json>'` | Custom hyperparameters |
 | `--rabc <model_path>` | Enable RA-BC with SARM reward model (HF path) |
 | `--rabc-image-key <k>` | Image key for reward annotations |
@@ -145,7 +179,7 @@ Terminal: `completed`, `failed`, `cancelled`
 
 ## Live Docs
 
-For the latest models, endpoints, and capabilities — always check the live documentation:
+For the latest models, endpoints, and capabilities, always check the live documentation:
 
 - **LLM context:** [docs.qualiastudios.dev/llms.txt](https://docs.qualiastudios.dev/llms.txt)
 - **API reference:** [dev-docs.qualiastudios.dev/api/reference](https://dev-docs.qualiastudios.dev/api/reference)
