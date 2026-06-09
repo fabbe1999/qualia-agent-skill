@@ -10,6 +10,10 @@ Make **robotics training** a skill for your AI agent. This skill lets any agent 
 - Build full training pipelines from conversation
 - Use Reward-Aware Behavior Cloning (RA-BC) with SARM reward models
 
+## Built for agents
+
+Every command takes a global `--json` flag that puts exactly one JSON object/array on stdout (errors included, as `{"error": {...}}`). Exit codes follow a stable contract (0 ok, 2 usage, 3 auth, 4 credits, 5 validation, 6 not found, 7 connection), so an agent can branch on `$?` instead of parsing prose. See `SKILL.md` for the full table.
+
 ## Supported Models
 
 | Type | Description |
@@ -30,6 +34,14 @@ More models coming soon.
    ```bash
    export QUALIA_API_KEY="your-api-key"
    ```
+
+### Verify your install
+
+```bash
+python3 scripts/qualia.py doctor
+```
+
+Three checks (API key set, auth/connectivity, models endpoint), PASS/FAIL each, exit 0 when all pass. Run it first; it catches a bad key or network issue before you waste a training launch.
 
 ### OpenClaw
 
