@@ -407,6 +407,90 @@ def cmd_cancel(args):
     print(f"Job {result.get('job_id', '?')}: {status}{msg}")
 
 
+def cmd_doctor(_args):
+    """Self-test: env var, auth/connectivity, models endpoint."""
+    checks = []
+
+    # Check 1: QUALIA_API_KEY set
+    key_set = bool(os.environ.get("QUALIA_API_KEY", ""))
+    checks.append({
+        "name": "QUALIA_API_KEY set",
+        "pass": key_set,
+        "detail": "environment variable present" if key_set
+                  else "set QUALIA_API_KEY before use",
+    })
+
+    # Check 2: GET /v1/credits (auth + connectivity)
+    balance = None
+    if key_set:
+        try:
+            result = api_request("GET", "/v1/credits")
+            balance = result.get("balance")
+            checks.append({
+                "name": "API auth (GET /v1/credits)",
+                "pass": True,
+                "detail": f"balance: {balance}",
+            })
+        except CliError as e:
+            checks.append({
+                "name": "API auth (GET /v1/credits)",
+                "pass": False,
+                "detail": e.message,
+            })
+    else:
+        checks.append({
+            "name": "API auth (GET /v1/credits)",
+            "pass": False,
+            "detail": "skipped: no API key",
+        })
+
+    # Check 3: GET /v1/models
+    model_count = None
+    if key_set:
+        try:
+            result = api_request("GET", "/v1/models")
+            models = result.get("data", [])
+            model_count = len(models)
+            checks.append({
+                "name": "Models endpoint (GET /v1/models)",
+                "pass": model_count > 0,
+                "detail": f"{model_count} models available",
+            })
+        except CliError as e:
+            checks.append({
+                "name": "Models endpoint (GET /v1/models)",
+                "pass": False,
+                "detail": e.message,
+            })
+    else:
+        checks.append({
+            "name": "Models endpoint (GET /v1/models)",
+            "pass": False,
+            "detail": "skipped: no API key",
+        })
+
+    all_pass = all(c["pass"] for c in checks)
+
+    if JSON_MODE:
+        emit({
+            "ok": all_pass,
+            "checks": checks,
+            "credits": balance,
+            "model_count": model_count,
+        })
+    else:
+        for c in checks:
+            mark = "PASS" if c["pass"] else "FAIL"
+            print(f"[{mark}] {c['name']}: {c['detail']}")
+        passed = sum(1 for c in checks if c["pass"])
+        print()
+        print(f"{passed}/{len(checks)} checks passed"
+              + ("" if all_pass else " - doctor found problems"))
+
+    if not all_pass:
+        sys.exit(EXIT_GENERIC)
+
+
 HELP_TEXT = """Qualia CLI - VLA fine-tuning platform
 
 Usage: qualia.py [--json] <command> [args]
@@ -415,6 +499,7 @@ Global flags:
   --json                                     Machine-readable output (single JSON object/array on stdout)
 
 Commands:
+  doctor                                     Self-test: env, auth, connectivity
   credits                                    Check credit balance
   models                                     List VLA types, camera slots, base models
   instances                                  List GPU instances with specs and pricing
@@ -459,6 +544,7 @@ def cmd_help(_args):
 
 
 COMMANDS = {
+    "doctor": cmd_doctor,
     "credits": cmd_credits,
     "models": cmd_models,
     "instances": cmd_instances,
