@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Qualia CLI — VLA fine-tuning platform.
+"""Qualia CLI - VLA fine-tuning platform.
 
 Pure Python, no external dependencies. Requires Python 3.6+.
 Set QUALIA_API_KEY environment variable before use.
+
+Global flag: --json (machine-readable output, exactly one JSON
+object/array on stdout; errors become {"error": {...}} on stdout).
 """
 
 import json
@@ -14,17 +17,55 @@ import urllib.request
 
 API_BASE = "https://api.qualiastudios.dev"
 
+JSON_MODE = False
+
+
+class CliError(Exception):
+    """Carries an exit code, a message, and optional structured details."""
+
+    def __init__(self, exit_code, message, details=None):
+        super().__init__(message)
+        self.exit_code = exit_code
+        self.message = message
+        self.details = details
+
+
+def emit(obj):
+    """Print a single JSON object/array (JSON mode output)."""
+    print(json.dumps(obj, indent=2))
+
+
+def fail(err):
+    """Report a CliError and exit with its code."""
+    if JSON_MODE:
+        emit({"error": {
+            "code": err.exit_code,
+            "message": err.message,
+            "details": err.details,
+        }})
+    else:
+        print(f"Error: {err.message}", file=sys.stderr)
+        if err.details is not None:
+            print(json.dumps(err.details, indent=2), file=sys.stderr)
+    sys.exit(err.exit_code)
+
+
+def usage_error(text):
+    raise CliError(1, text)
+
 
 def get_api_key():
     key = os.environ.get("QUALIA_API_KEY", "")
     if not key:
-        print("Error: QUALIA_API_KEY not set", file=sys.stderr)
-        sys.exit(1)
+        raise CliError(1, "QUALIA_API_KEY not set")
     return key
 
 
 def api_request(method, path, body=None):
-    """Make an authenticated API request. Returns parsed JSON."""
+    """Make an authenticated API request. Returns parsed JSON.
+
+    Raises CliError on HTTP or connection failure.
+    """
     url = f"{API_BASE}{path}"
     headers = {"X-API-Key": get_api_key()}
     data = None
@@ -40,26 +81,30 @@ def api_request(method, path, body=None):
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         try:
-            err_body = json.loads(e.read().decode("utf-8"))
-            print(f"API error ({e.code}): {json.dumps(err_body, indent=2)}", file=sys.stderr)
+            details = json.loads(e.read().decode("utf-8"))
         except Exception:
-            print(f"API error ({e.code}): {e.reason}", file=sys.stderr)
-        sys.exit(1)
+            details = {"reason": str(e.reason)}
+        raise CliError(1, f"API error ({e.code})", details)
     except urllib.error.URLError as e:
-        print(f"Connection error: {e.reason}", file=sys.stderr)
-        sys.exit(1)
+        raise CliError(1, f"Connection error: {e.reason}")
 
 
-# ── Commands ──────────────────────────────────────────────────────────
+# -- Commands ----------------------------------------------------------
 
 
 def cmd_credits(_args):
     result = api_request("GET", "/v1/credits")
+    if JSON_MODE:
+        emit(result)
+        return
     print(f"Credits: {result.get('balance', 'unknown')}")
 
 
 def cmd_models(_args):
     result = api_request("GET", "/v1/models")
+    if JSON_MODE:
+        emit(result.get("data", []))
+        return
     for m in result.get("data", []):
         slots = ", ".join(m.get("camera_slots", []))
         print(f"[{m['id']}] {m['name']}")
@@ -74,10 +119,13 @@ def cmd_models(_args):
 
 def cmd_instances(_args):
     result = api_request("GET", "/v1/instances")
+    if JSON_MODE:
+        emit(result.get("data", []))
+        return
     for i in result.get("data", []):
         specs = i.get("specs", {})
         regions = ", ".join(r["name"] for r in i.get("regions", []))
-        print(f"[{i['id']}] {i['gpu_description']} — {i['credits_per_hour']} credits/hr")
+        print(f"[{i['id']}] {i['gpu_description']} - {i['credits_per_hour']} credits/hr")
         print(f"  {specs.get('gpu_count', '?')}x {specs.get('gpu_type', '?')} | "
               f"{specs.get('memory_gib', '?')}GB RAM | "
               f"{specs.get('storage_gib', '?')}GB storage | "
@@ -88,8 +136,11 @@ def cmd_instances(_args):
 
 def cmd_projects(_args):
     result = api_request("GET", "/v1/projects")
+    if JSON_MODE:
+        emit(result.get("data", []))
+        return
     for p in result.get("data", []):
-        desc = f" — {p['description']}" if p.get("description") else ""
+        desc = f" - {p['description']}" if p.get("description") else ""
         created = p.get("created_at", "")[:10]
         jobs = p.get("jobs", [])
         print(f"[{p['project_id']}] {p['name']}{desc}")
@@ -104,12 +155,14 @@ def cmd_projects(_args):
 
 def cmd_project_create(args):
     if not args:
-        print("Usage: qualia.py project-create <name> [description]", file=sys.stderr)
-        sys.exit(1)
+        usage_error("Usage: qualia.py project-create <name> [description]")
     body = {"name": args[0]}
     if len(args) > 1 and args[1]:
         body["description"] = args[1]
     result = api_request("POST", "/v1/projects", body)
+    if JSON_MODE:
+        emit(result)
+        return
     if result.get("created"):
         print(f"Created project: {result['project_id']}")
     else:
@@ -118,9 +171,11 @@ def cmd_project_create(args):
 
 def cmd_project_delete(args):
     if not args:
-        print("Usage: qualia.py project-delete <project_id>", file=sys.stderr)
-        sys.exit(1)
+        usage_error("Usage: qualia.py project-delete <project_id>")
     result = api_request("DELETE", f"/v1/projects/{args[0]}")
+    if JSON_MODE:
+        emit(result)
+        return
     if result.get("deleted"):
         print(f"Deleted project: {result['project_id']}")
     else:
@@ -129,11 +184,13 @@ def cmd_project_delete(args):
 
 def cmd_dataset_keys(args):
     if not args:
-        print("Usage: qualia.py dataset-keys <huggingface_dataset_id>", file=sys.stderr)
-        print("  e.g. qualia.py dataset-keys lerobot/aloha_sim_insertion_human", file=sys.stderr)
-        sys.exit(1)
+        usage_error("Usage: qualia.py dataset-keys <huggingface_dataset_id>\n"
+                    "  e.g. qualia.py dataset-keys lerobot/aloha_sim_insertion_human")
     dataset_id = args[0]
     result = api_request("GET", f"/v1/datasets/{dataset_id}/image-keys")
+    if JSON_MODE:
+        emit(result)
+        return
     print(f"Image keys for {dataset_id}:")
     for key in result.get("image_keys", []):
         print(f"  {key}")
@@ -141,15 +198,17 @@ def cmd_dataset_keys(args):
 
 def cmd_hyperparams(args):
     if not args:
-        print("Usage: qualia.py hyperparams <act|smolvla|pi0|pi05|gr00t_n1_5> [model_id]", file=sys.stderr)
-        print("  model_id required for: smolvla, pi0, pi05", file=sys.stderr)
-        sys.exit(1)
+        usage_error("Usage: qualia.py hyperparams <act|smolvla|pi0|pi05|gr00t_n1_5> [model_id]\n"
+                    "  model_id required for: smolvla, pi0, pi05")
     vla_type = args[0]
     model_id = args[1] if len(args) > 1 else None
     path = f"/v1/finetune/hyperparams/defaults?vla_type={urllib.parse.quote(vla_type)}"
     if model_id:
         path += f"&model_id={urllib.parse.quote(model_id)}"
     result = api_request("GET", path)
+    if JSON_MODE:
+        emit(result.get("data", result))
+        return
     label = f"{vla_type} ({model_id})" if model_id else vla_type
     print(f"Defaults for {label}:")
     print(json.dumps(result.get("data", result), indent=2))
@@ -157,16 +216,17 @@ def cmd_hyperparams(args):
 
 def cmd_hyperparams_validate(args):
     if len(args) < 2:
-        print("Usage: qualia.py hyperparams-validate <vla_type> '<hyperparams_json>'", file=sys.stderr)
-        sys.exit(1)
+        usage_error("Usage: qualia.py hyperparams-validate <vla_type> '<hyperparams_json>'")
     vla_type = args[0]
     try:
         hyper_json = json.loads(args[1])
     except json.JSONDecodeError as e:
-        print(f"Invalid JSON: {e}", file=sys.stderr)
-        sys.exit(1)
+        usage_error(f"Invalid JSON: {e}")
     path = f"/v1/finetune/hyperparams/validate?vla_type={urllib.parse.quote(vla_type)}"
     result = api_request("POST", path, hyper_json)
+    if JSON_MODE:
+        emit(result)
+        return
     if result.get("valid"):
         print("✓ Valid")
     elif "valid" in result and not result["valid"]:
@@ -191,54 +251,52 @@ def _parse_flags(argv):
                 flags[arg[2:]] = argv[i + 1]
                 i += 1
             else:
-                print(f"Flag {arg} requires a value", file=sys.stderr)
-                sys.exit(1)
+                usage_error(f"Flag {arg} requires a value")
         else:
-            print(f"Unknown argument: {arg}", file=sys.stderr)
-            sys.exit(1)
+            usage_error(f"Unknown argument: {arg}")
         i += 1
     return flags
 
 
+FINETUNE_USAGE = """Usage: qualia.py finetune <project_id> <vla_type> <dataset_id> <hours> '<camera_mappings_json>' [flags]
+
+  Required:
+    project_id       UUID from 'qualia.py projects'
+    vla_type         act | smolvla | pi0 | pi05 | gr00t_n1_5
+    dataset_id       HuggingFace dataset ID (e.g. lerobot/pusht)
+    hours            Training duration (max 168)
+    camera_mappings  JSON: slot name -> dataset image key
+                     e.g. '{"cam_1": "observation.images.top"}'
+
+  Optional flags:
+    --model <id>         Base model (required for smolvla/pi0/pi05)
+    --name <str>         Job display name
+    --instance <id>      GPU instance (from 'qualia.py instances')
+    --region <name>      Cloud region
+    --batch-size <n>     Training batch size (1-512, default 32)
+    --hyper-spec '<json>' Advanced hyperparameters (from 'qualia.py hyperparams')
+    --rabc <model_path>  Enable RA-BC with SARM reward model (HF path)
+    --rabc-image-key <k> Image key for reward annotations
+    --rabc-head-mode <m> RA-BC head mode (e.g. sparse)
+
+  Tip: run 'qualia.py dataset-keys <dataset_id>' to discover image key names"""
+
+
 def cmd_finetune(args):
     if len(args) < 5:
-        print("Usage: qualia.py finetune <project_id> <vla_type> <dataset_id> <hours> '<camera_mappings_json>' [flags]", file=sys.stderr)
-        print(file=sys.stderr)
-        print("  Required:", file=sys.stderr)
-        print("    project_id       UUID from 'qualia.py projects'", file=sys.stderr)
-        print("    vla_type         act | smolvla | pi0 | pi05 | gr00t_n1_5", file=sys.stderr)
-        print("    dataset_id       HuggingFace dataset ID (e.g. lerobot/pusht)", file=sys.stderr)
-        print("    hours            Training duration (max 168)", file=sys.stderr)
-        print("    camera_mappings  JSON: slot name → dataset image key", file=sys.stderr)
-        print('                     e.g. \'{"cam_1": "observation.images.top"}\'', file=sys.stderr)
-        print(file=sys.stderr)
-        print("  Optional flags:", file=sys.stderr)
-        print("    --model <id>         Base model (required for smolvla/pi0/pi05)", file=sys.stderr)
-        print("    --name <str>         Job display name", file=sys.stderr)
-        print("    --instance <id>      GPU instance (from 'qualia.py instances')", file=sys.stderr)
-        print("    --region <name>      Cloud region", file=sys.stderr)
-        print("    --batch-size <n>     Training batch size (1-512, default 32)", file=sys.stderr)
-        print("    --hyper-spec '<json>' Advanced hyperparameters (from 'qualia.py hyperparams')", file=sys.stderr)
-        print("    --rabc <model_path>  Enable RA-BC with SARM reward model (HF path)", file=sys.stderr)
-        print("    --rabc-image-key <k> Image key for reward annotations", file=sys.stderr)
-        print("    --rabc-head-mode <m> RA-BC head mode (e.g. sparse)", file=sys.stderr)
-        print(file=sys.stderr)
-        print("  Tip: run 'qualia.py dataset-keys <dataset_id>' to discover image key names", file=sys.stderr)
-        sys.exit(1)
+        usage_error(FINETUNE_USAGE)
 
     project_id, vla_type, dataset_id = args[0], args[1], args[2]
 
     try:
         hours = int(args[3]) if "." not in args[3] else float(args[3])
     except ValueError:
-        print(f"Invalid hours value: {args[3]}", file=sys.stderr)
-        sys.exit(1)
+        usage_error(f"Invalid hours value: {args[3]}")
 
     try:
         camera_mappings = json.loads(args[4])
     except json.JSONDecodeError as e:
-        print(f"Invalid camera_mappings JSON: {e}", file=sys.stderr)
-        sys.exit(1)
+        usage_error(f"Invalid camera_mappings JSON: {e}")
 
     flags = _parse_flags(args[5:])
 
@@ -262,14 +320,12 @@ def cmd_finetune(args):
         try:
             body["batch_size"] = int(flags["batch-size"])
         except ValueError:
-            print(f"Invalid batch-size: {flags['batch-size']}", file=sys.stderr)
-            sys.exit(1)
+            usage_error(f"Invalid batch-size: {flags['batch-size']}")
     if "hyper-spec" in flags:
         try:
             body["vla_hyper_spec"] = json.loads(flags["hyper-spec"])
         except json.JSONDecodeError as e:
-            print(f"Invalid hyper-spec JSON: {e}", file=sys.stderr)
-            sys.exit(1)
+            usage_error(f"Invalid hyper-spec JSON: {e}")
     if "rabc" in flags:
         body["use_rabc"] = True
         body["sarm_reward_model_path"] = flags["rabc"]
@@ -279,6 +335,9 @@ def cmd_finetune(args):
             body["rabc_head_mode"] = flags["rabc-head-mode"]
 
     result = api_request("POST", "/v1/finetune", body)
+    if JSON_MODE:
+        emit(result)
+        return
     print(f"Job created: {result.get('job_id', 'unknown')}")
     print(f"Status: {result.get('status', 'unknown')}")
     if result.get("message"):
@@ -287,9 +346,11 @@ def cmd_finetune(args):
 
 def cmd_status(args):
     if not args:
-        print("Usage: qualia.py status <job_id>", file=sys.stderr)
-        sys.exit(1)
+        usage_error("Usage: qualia.py status <job_id>")
     result = api_request("GET", f"/v1/finetune/{args[0]}")
+    if JSON_MODE:
+        emit(result)
+        return
     print(f"Job {result.get('job_id', '?')}")
     print(f"Status: {result.get('status', '?')} | Phase: {result.get('current_phase', '?')}")
     print()
@@ -312,48 +373,61 @@ def cmd_status(args):
 
 def cmd_cancel(args):
     if not args:
-        print("Usage: qualia.py cancel <job_id>", file=sys.stderr)
-        sys.exit(1)
+        usage_error("Usage: qualia.py cancel <job_id>")
     result = api_request("POST", f"/v1/finetune/{args[0]}/cancel")
+    if JSON_MODE:
+        emit(result)
+        return
     status = "cancelled" if result.get("cancelled") else "cancellation failed"
-    msg = f" — {result['message']}" if result.get("message") else ""
+    msg = f" - {result['message']}" if result.get("message") else ""
     print(f"Job {result.get('job_id', '?')}: {status}{msg}")
 
 
+HELP_TEXT = """Qualia CLI - VLA fine-tuning platform
+
+Usage: qualia.py [--json] <command> [args]
+
+Global flags:
+  --json                                     Machine-readable output (single JSON object/array on stdout)
+
+Commands:
+  credits                                    Check credit balance
+  models                                     List VLA types, camera slots, base models
+  instances                                  List GPU instances with specs and pricing
+
+  projects                                   List projects with jobs
+  project-create <name> [description]        Create a project
+  project-delete <project_id>                Delete a project (no active jobs)
+
+  dataset-keys <dataset_id>                  List image keys in a HuggingFace dataset
+  hyperparams <vla_type> [model_id]          Get default hyperparameters
+  hyperparams-validate <vla_type> '<json>'   Validate custom hyperparameters
+
+  finetune <project_id> <vla_type> <dataset_id> <hours> '<cameras>' [--flags]
+    --model <id>         Base model ID (required for smolvla/pi0/pi05)
+    --name <str>         Job display name
+    --instance <id>      GPU instance type
+    --region <name>      Cloud region
+    --batch-size <n>     Batch size (1-512)
+    --hyper-spec '<json>' Custom hyperparameters
+    --rabc <model_path>  Enable RA-BC with SARM reward model (HF path)
+    --rabc-image-key <k> Image key for reward annotations
+    --rabc-head-mode <m> RA-BC head mode (e.g. sparse)
+
+  status <job_id>                            Check job status and phase history
+  cancel <job_id>                            Cancel a running job
+
+VLA types: act, smolvla, pi0, pi05, gr00t_n1_5, sarm
+  model_id REQUIRED for: smolvla, pi0, pi05
+  model_id NOT supported for: act, gr00t_n1_5, sarm
+  RA-BC supported for: smolvla, pi0, pi05"""
+
+
 def cmd_help(_args):
-    print("Qualia CLI - VLA fine-tuning platform")
-    print()
-    print("Commands:")
-    print("  credits                                    Check credit balance")
-    print("  models                                     List VLA types, camera slots, base models")
-    print("  instances                                  List GPU instances with specs and pricing")
-    print()
-    print("  projects                                   List projects with jobs")
-    print("  project-create <name> [description]        Create a project")
-    print("  project-delete <project_id>                Delete a project (no active jobs)")
-    print()
-    print("  dataset-keys <dataset_id>                  List image keys in a HuggingFace dataset")
-    print("  hyperparams <vla_type> [model_id]          Get default hyperparameters")
-    print("  hyperparams-validate <vla_type> '<json>'   Validate custom hyperparameters")
-    print()
-    print("  finetune <project_id> <vla_type> <dataset_id> <hours> '<cameras>' [--flags]")
-    print("    --model <id>         Base model ID (required for smolvla/pi0/pi05)")
-    print("    --name <str>         Job display name")
-    print("    --instance <id>      GPU instance type")
-    print("    --region <name>      Cloud region")
-    print("    --batch-size <n>     Batch size (1-512)")
-    print("    --hyper-spec '<json>' Custom hyperparameters")
-    print("    --rabc <model_path>  Enable RA-BC with SARM reward model (HF path)")
-    print("    --rabc-image-key <k> Image key for reward annotations")
-    print("    --rabc-head-mode <m> RA-BC head mode (e.g. sparse)")
-    print()
-    print("  status <job_id>                            Check job status and phase history")
-    print("  cancel <job_id>                            Cancel a running job")
-    print()
-    print("VLA types: act, smolvla, pi0, pi05, gr00t_n1_5, sarm")
-    print("  model_id REQUIRED for: smolvla, pi0, pi05")
-    print("  model_id NOT supported for: act, gr00t_n1_5, sarm")
-    print("  RA-BC supported for: smolvla, pi0, pi05")
+    if JSON_MODE:
+        emit({"commands": sorted(COMMANDS.keys()), "usage": HELP_TEXT})
+        return
+    print(HELP_TEXT)
 
 
 COMMANDS = {
@@ -374,17 +448,26 @@ COMMANDS = {
 
 
 def main():
+    global JSON_MODE
     args = sys.argv[1:]
+
+    # Strip the global --json flag wherever it appears.
+    if "--json" in args:
+        JSON_MODE = True
+        args = [a for a in args if a != "--json"]
+
     cmd = args[0] if args else "help"
     rest = args[1:] if len(args) > 1 else []
 
     handler = COMMANDS.get(cmd)
     if handler is None:
-        print(f"Unknown command: {cmd}", file=sys.stderr)
-        print("Run 'qualia.py help' for available commands.", file=sys.stderr)
-        sys.exit(1)
+        fail(CliError(1, f"Unknown command: {cmd}",
+                      {"hint": "Run 'qualia.py help' for available commands."}))
 
-    handler(rest)
+    try:
+        handler(rest)
+    except CliError as err:
+        fail(err)
 
 
 if __name__ == "__main__":
