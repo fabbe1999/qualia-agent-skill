@@ -1,7 +1,7 @@
 ---
 name: qualia
 description: "Fine-tune robot foundation models (VLA, vision-language-action) on cloud GPUs: pi0, pi0.5 (π0.5), GR00T N1.5, ACT, SmolVLA, SARM reward models. Robotics and robot training with LeRobot-format HuggingFace datasets. Launch, monitor, and cancel fine-tune jobs from the CLI. Agent-native: --json output and stable exit codes."
-metadata: {"version":"2.0.0","clawdis":{"emoji":"🤖","requires":{"env":["QUALIA_API_KEY"]},"tags":["robotics","robot-learning","foundation-models","vla","fine-tuning","imitation-learning","manipulation","embodied-ai","ml-training","gpu","reward-model"],"categories":["robotics","ai-ml","developer-tools"],"homepage":"https://qualiastudios.dev"}}
+metadata: {"version":"2.1.0","clawdis":{"emoji":"🤖","requires":{"env":["QUALIA_API_KEY"]},"tags":["robotics","robot-learning","foundation-models","vla","fine-tuning","imitation-learning","manipulation","embodied-ai","ml-training","gpu","reward-model"],"categories":["robotics","ai-ml","developer-tools"],"homepage":"https://qualiastudios.dev"}}
 ---
 
 # Qualia

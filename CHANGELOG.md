@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0 (2026-06-10)
+## 2.1.0 (2026-06-10)
 
 Agent-native release. Built for AI agents driving the CLI programmatically.
 
