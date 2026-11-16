@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.0.0
+
+The new Qualia platform: robot-data curation before training.
+
+- The skill now drives the official `qualia` CLI (`qualia-cli`, with `qualia-sdk`) instead of its own script. `scripts/qualia.py` and `scripts/qualia.sh` are removed.
+- One path from upload to download: upload or import from Hugging Face, wait for preparation and the free automatic checks, read the results, optionally run the paid VLM check (estimate first, ask the user), keep or reject episodes, save a version, download it as LeRobot v3, LeRobot v2.1, MCAP, or for Physical Intelligence and Dream Labs.
+- Fine-tuning commands are removed: the new platform has no training on plans yet.
+- Requirements: the `qualia` binary instead of `python3`, with a uv install spec; optional `QUALIA_BASE_URL` and `HF_TOKEN` declared.
+- Exit codes are now the CLI's own: 0 success, 1 failed or refused, 2 used wrongly, 3 (upload only) bytes kept but no episode derived.
+
 ## 2.1.1 (2026-06-29)
 
 Install and setup documentation hardening.
