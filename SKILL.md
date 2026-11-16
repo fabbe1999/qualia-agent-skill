@@ -91,7 +91,7 @@ A key acts as the person who made it, with their role, across the whole organiza
 ```bash
 qualia version              # CLI and SDK versions
 qualia auth status          # "API key: configured", the base URL and the key's scope; never prints the key
-qualia credit --json        # the account's credit balance: proves the key and the connection
+qualia credit --json        # "balance" is the account's credits: proves the key and the connection
 ```
 
 ## Machine-readable output
@@ -147,22 +147,31 @@ After an upload, Qualia prepares it on its own: it reads the takes, sorts them i
 
 ```bash
 qualia check policy "$DATASET"                        # which checks start by themselves
-qualia dataset preparation "$DATASET" --wait --timeout 1800 --json
+qualia dataset preparation "$DATASET" --wait --timeout 1800 --json   # done when "state" is SUCCEEDED (or FAILED)
 qualia check runs --dataset "$DATASET"                # the check runs, newest first
 ```
 
-When preparation ends, **the free checks** start by themselves (`heuristic: on` by default). Code reads each episode's data, with no model involved. **The paid VLM check**, where a model watches each episode against its Task, starts by itself only where someone switched it on (`graph: off` by default).
+When preparation ends, **the free checks** start by themselves (`heuristic: on` by default). Code reads each episode's data, with no model involved. **The paid VLM check**, where a model watches each episode against its Task, starts by itself only where someone switched it on (`graph: off` by default). In `check policy --json`, read `heuristicEnabled` and `graphEnabled`.
+
+A take that preparation split stays listed as the parent, with its pieces as its children. To see the pieces only, filter with `child_count = 0`.
 
 ### 3. Read the results
 
 ```bash
-qualia dataset checks list "$DATASET" --json          # every check and its last result: passCount, failCount
-qualia check findings "$DATASET" -n 1000 --json       # the issues and notes the checks raised, per episode, with the reason
-qualia dataset issues summary "$DATASET"              # open issues, counted per code
-qualia dataset issues list "$DATASET" --filter 'state = OPEN AND blocks = true'
+# every check's last result: how many passed, failed, or could not be judged
+# (free checks count episodes; graph.evaluate counts the things it judged in them)
+qualia dataset checks list "$DATASET" --json \
+  | jq '.datasetChecks[] | {checkId, pass: .lastResult.passCount, fail: .lastResult.failCount, unknown: .lastResult.unknownCount}'
+
+qualia dataset checks findings "$DATASET" -n 1000 --json                          # every check's findings
+qualia dataset checks findings "$DATASET" --check heuristic.frozen -n 1000 --json # one check's
+qualia dataset issues summary "$DATASET"              # issues and notes per code: open and dismissed
+qualia dataset issues list "$DATASET" --filter 'state = OPEN AND blocks = true' -n 100 --json
 ```
 
-The free checks list only their failures: an episode a check judged without a finding passed it. Read the counts in `checks list` for how many passed.
+- **The free checks list only their failures.** An episode a check judged without a finding passed it. `unknown` counts the episodes it could not judge.
+- **The reason is in each finding's `summary`**, for example which joint a frozen check found stuck and how far its command moved.
+- **Notes and issues.** A free check's failure becomes a **note** on the episode: worth reading, not blocking. The VLM check's failures become blocking **issues**. Filters on `open_issue_codes` match blocking issues only; `issues summary` shows both kinds.
 
 ### 4. Optional: the VLM check (spends credits)
 
@@ -192,9 +201,11 @@ qualia dataset split <EPISODE> -d "$DATASET" --keep 0.5-6 --keep 8-14 --dry-run
 
 ```bash
 qualia dataset version-preview "$DATASET" --json > preview.json
-jq '.preview | {episodeCount, unprocessable}' preview.json
+jq '.preview | {episodeCount, unprocessable, sameAsVersion}' preview.json
 qualia dataset pin "$DATASET" 1.0 --preview "$(jq -r .preview.name preview.json)" --note "first cut"
 ```
+
+The preview changes nothing; only `pin` saves the version. By default a version holds the episodes someone kept with `keep` (`kept_by_person`). `--include` picks other classes (`kept`, `flagged`, `rejected`, `rejected_by_person`) and can be repeated. `sameAsVersion` names an existing version with exactly this content.
 
 ### 7. Download it for training
 
@@ -209,7 +220,7 @@ qualia dataset download "${DATASET}:1.0" ./for-dreamlabs --format dreamlabs_v2_1
 ## Find your way around
 
 ```bash
-qualia dataset list                                   # the datasets the key can reach
+qualia dataset list -q shelf --kind all               # datasets by name (20 a page; uploads only without --kind)
 qualia dataset episodes "$DATASET" --filter 'operator = "ana"' --json
 qualia dataset summary "$DATASET" --facet task --facet operator --facet session
 qualia status list --running --json                   # running work; qualia status cancel <name> stops it
